@@ -25,6 +25,6 @@ RUN pip3 install --no-cache-dir --break-system-packages \
 RUN chmod +x /run.sh
 
 # Expose port
-EXPOSE 5001
+EXPOSE 8099
 
 CMD ["/run.sh"]

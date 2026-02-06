@@ -35,7 +35,7 @@ cat > /app/config.json << EOF
     },
     "server": {
         "host": "0.0.0.0",
-        "port": 5001
+        "port": 8099
     },
     "price_area": "${PRICE_AREA}"
 }

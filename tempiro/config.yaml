@@ -1,6 +1,6 @@
 name: "Tempiro Energy Monitor"
 description: "Monitor energy consumption from Tempiro smart breakers with spot price integration"
-version: "1.0.1"
+version: "1.0.2"
 slug: "tempiro"
 url: "https://github.com/hesv09/tempiro-ha-addon"
 arch:
@@ -14,9 +14,9 @@ startup: application
 boot: auto
 host_network: true
 ports:
-  5001/tcp: 5001
+  8099/tcp: 8099
 ports_description:
-  5001/tcp: "Web interface"
+  8099/tcp: "Web interface"
 map:
   - config:rw
 options:
@@ -30,5 +30,5 @@ schema:
 panel_icon: "mdi:water-boiler"
 panel_title: "Tempiro Energy"
 ingress: true
-ingress_port: 5001
+ingress_port: 8099
 homeassistant_api: false
