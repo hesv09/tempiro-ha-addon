@@ -195,7 +195,7 @@
     <div class="header">
         <h1>Tempiro Dashboard</h1>
         <div class="status">
-            <a href="/analysis" style="color: var(--accent); text-decoration: none; margin-right: 16px; font-size: 0.85rem;">Analys &rarr;</a>
+            <a href="analysis" style="color: var(--accent); text-decoration: none; margin-right: 16px; font-size: 0.85rem;">Analys &rarr;</a>
             <div class="dot" id="connectionDot"></div>
             <span id="connectionText">Ansluter...</span>
             <span style="margin-left: 12px" id="lastUpdated"></span>
@@ -257,7 +257,8 @@
     </div>
 
     <script>
-    const API = '';
+    // Auto-detect API base path for HA ingress compatibility
+    const API = window.location.pathname.replace(/\/(index\.html)?$/, '');
     let devices = [];
     let spotPrices = [];
     let powerChart, priceChart, weekChart;

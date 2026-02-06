@@ -240,7 +240,8 @@
     </div>
 
     <script>
-    const API = '';
+    // Auto-detect API base path for HA ingress compatibility
+    const API = window.location.pathname.replace(/\/ha\/?$/, '');
     let periodDays = 7;
     let endDate = new Date();
     let dailyChart = null;

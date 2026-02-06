@@ -200,8 +200,8 @@
     <div class="header">
         <h1>Tempiro Analys</h1>
         <div class="nav-links">
-            <a href="/">Live Dashboard</a>
-            <a href="/analysis" class="active">Analys</a>
+            <a href="./">Live Dashboard</a>
+            <a href="analysis" class="active">Analys</a>
         </div>
     </div>
 
@@ -301,7 +301,8 @@
     </div>
 
     <script>
-    const API = '';
+    // Auto-detect API base path for HA ingress compatibility
+    const API = window.location.pathname.replace(/\/analysis\/?$/, '');
     let currentPeriod = 30;
     let currentDevice = '';
     let dailyData = [];
