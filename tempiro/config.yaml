@@ -1,6 +1,6 @@
 name: "Tempiro Energy Monitor"
 description: "Monitor energy consumption from Tempiro smart breakers with spot price integration"
-version: "1.0.0"
+version: "1.0.1"
 slug: "tempiro"
 url: "https://github.com/hesv09/tempiro-ha-addon"
 arch:
@@ -12,6 +12,7 @@ arch:
 init: false
 startup: application
 boot: auto
+host_network: true
 ports:
   5001/tcp: 5001
 ports_description:
