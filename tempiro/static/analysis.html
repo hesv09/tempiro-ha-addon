@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tempiro Analys</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0f1117;
+            --card: #1a1d27;
+            --border: #2a2d3a;
+            --text: #e4e4e7;
+            --muted: #8b8d97;
+            --accent: #3b82f6;
+            --green: #22c55e;
+            --red: #ef4444;
+            --amber: #f59e0b;
+            --orange: #f97316;
+            --purple: #a855f7;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        .header h1 { font-size: 1.5rem; font-weight: 600; }
+        .nav-links {
+            display: flex;
+            gap: 16px;
+        }
+        .nav-links a {
+            color: var(--muted);
+            text-decoration: none;
+            font-size: 0.9rem;
+            padding: 6px 12px;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .nav-links a:hover { color: var(--accent); background: rgba(59, 130, 246, 0.1); }
+        .nav-links a.active { color: var(--accent); background: rgba(59, 130, 246, 0.15); }
+
+        .grid { display: grid; gap: 16px; margin-bottom: 24px; }
+        .grid-2 { grid-template-columns: repeat(2, 1fr); }
+        .grid-3 { grid-template-columns: repeat(3, 1fr); }
+        .grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+        .card h2 {
+            font-size: 1rem;
+            font-weight: 500;
+            margin-bottom: 16px;
+            color: var(--muted);
+        }
+        .card.full-width { grid-column: 1 / -1; }
+
+        .stat-card { text-align: center; padding: 24px 16px; }
+        .stat-value { font-size: 2rem; font-weight: 700; margin-bottom: 4px; }
+        .stat-label { font-size: 0.8rem; color: var(--muted); }
+        .stat-change { font-size: 0.75rem; margin-top: 4px; }
+        .stat-change.positive { color: var(--green); }
+        .stat-change.negative { color: var(--red); }
+
+        .chart-container { position: relative; height: 300px; }
+        .chart-container.tall { height: 400px; }
+
+        .controls {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: transparent;
+            color: var(--muted);
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn:hover { border-color: var(--accent); color: var(--accent); }
+        .btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn:disabled:hover { border-color: var(--border); color: var(--muted); }
+
+        select {
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--card);
+            color: var(--text);
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+        select:focus { outline: none; border-color: var(--accent); }
+
+        .device-24h {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .device-24h:last-child { border-bottom: none; }
+        .device-24h-name { font-weight: 500; }
+        .device-24h-stats {
+            display: flex;
+            gap: 24px;
+            align-items: center;
+        }
+        .device-24h-stat {
+            text-align: right;
+        }
+        .device-24h-value { font-size: 1.1rem; font-weight: 600; }
+        .device-24h-label { font-size: 0.7rem; color: var(--muted); }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        .data-table th, .data-table td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        .data-table th {
+            color: var(--muted);
+            font-weight: 500;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .data-table tr:hover { background: rgba(59, 130, 246, 0.05); }
+        .data-table .number { text-align: right; font-variant-numeric: tabular-nums; }
+
+        .db-status {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+        }
+        .db-status-item { }
+        .db-status-label { font-size: 0.75rem; color: var(--muted); }
+        .db-status-value { font-size: 0.9rem; margin-top: 2px; }
+
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: var(--muted);
+        }
+        .no-data a { color: var(--accent); }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--muted);
+        }
+        .loading::after {
+            content: '';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+
+        @media (max-width: 1024px) {
+            .grid-4 { grid-template-columns: repeat(2, 1fr); }
+            .grid-3 { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 768px) {
+            body { padding: 12px; }
+            .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+            .device-24h { flex-direction: column; align-items: flex-start; gap: 8px; }
+            .device-24h-stats { width: 100%; justify-content: space-between; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Tempiro Analys</h1>
+        <div class="nav-links">
+            <a href="/">Live Dashboard</a>
+            <a href="/analysis" class="active">Analys</a>
+        </div>
+    </div>
+
+    <!-- Period selector with navigation -->
+    <div class="card" style="margin-bottom: 24px; padding: 16px 20px;">
+        <div class="controls" style="margin-bottom: 0; justify-content: space-between; align-items: center;">
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <button class="btn" onclick="summaryNav('prev')" id="summaryPrev">&larr;</button>
+                <span id="summaryRange" style="font-size: 0.9rem; color: var(--text); min-width: 200px; text-align: center; font-weight: 500;">--</span>
+                <button class="btn" onclick="summaryNav('next')" id="summaryNext">&rarr;</button>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <button class="btn" onclick="setSummaryPeriod(7)">7 dagar</button>
+                <button class="btn active" onclick="setSummaryPeriod(30)" id="summaryBtn30">30 dagar</button>
+                <button class="btn" onclick="setSummaryPeriod(90)">90 dagar</button>
+                <select id="deviceFilter" onchange="filterByDevice()" style="margin-left: 8px;">
+                    <option value="">Alla enheter</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary stats -->
+    <div class="grid grid-4" id="summaryGrid">
+        <div class="card stat-card">
+            <div class="stat-value" style="color: var(--accent)" id="totalEnergy">--</div>
+            <div class="stat-label">Total energi (kWh)</div>
+            <div class="stat-change" id="avgDailyEnergy">-- snitt/dag</div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-value" style="color: var(--amber)" id="totalCost">--</div>
+            <div class="stat-label">Total kostnad (kr)</div>
+            <div class="stat-change" id="avgDailyCost">-- snitt/dag</div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-value" style="color: var(--green)" id="avgPrice">--</div>
+            <div class="stat-label">Snittpris (ore/kWh)</div>
+            <div class="stat-change" id="priceRange">--</div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-value" style="color: var(--purple)" id="dataPoints">--</div>
+            <div class="stat-label">Datapunkter</div>
+            <div class="stat-change" id="dataRange">--</div>
+        </div>
+    </div>
+
+    <!-- 24h rolling stats -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h2>Aktiva timmar senaste 24h (rullande)</h2>
+        <div id="active24h">
+            <div class="loading">Laddar</div>
+        </div>
+    </div>
+
+    <!-- Daily chart with price overlay -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h2>Daglig forbrukning &amp; kostnad</h2>
+        <div class="controls" style="justify-content: space-between; align-items: center;">
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <button class="btn" onclick="dailyChartNav('prev')" id="dailyPrev">&larr; Tidigare</button>
+                <span id="dailyRange" style="font-size: 0.85rem; color: var(--muted); min-width: 180px; text-align: center;">--</span>
+                <button class="btn" onclick="dailyChartNav('next')" id="dailyNext">Senare &rarr;</button>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn" onclick="setDailyWindow(7)">7 dagar</button>
+                <button class="btn active" onclick="setDailyWindow(14)">14 dagar</button>
+                <button class="btn" onclick="setDailyWindow(30)">30 dagar</button>
+            </div>
+        </div>
+        <div class="chart-container tall">
+            <canvas id="dailyChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Hourly chart -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h2>Timvis forbrukning &amp; elpris</h2>
+        <div class="controls">
+            <button class="btn active" onclick="setHourlyView('energy')">Energi (kWh)</button>
+            <button class="btn" onclick="setHourlyView('cost')">Kostnad (kr)</button>
+            <button class="btn" onclick="setHourlyView('price')">Elpris (ore)</button>
+        </div>
+        <div class="chart-container tall">
+            <canvas id="hourlyChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Database status -->
+    <div class="card">
+        <h2>Databasstatus</h2>
+        <div class="db-status" id="dbStatus">
+            <div class="loading">Laddar</div>
+        </div>
+        <div style="margin-top: 16px; font-size: 0.85rem; color: var(--muted);">
+            Tips: Kor <code style="background: var(--border); padding: 2px 6px; border-radius: 4px;">python backfill.py --days 90</code> for att hamta historisk data.
+        </div>
+    </div>
+
+    <script>
+    const API = '';
+    let currentPeriod = 30;
+    let currentDevice = '';
+    let dailyData = [];
+    let hourlyData = [];
+    let priceData = [];
+    let devices = [];
+
+    // Summary navigation state
+    let summaryPeriodDays = 30;
+    let summaryEndDate = new Date();
+
+    // Daily chart navigation state
+    let dailyWindowDays = 14;
+    let dailyEndDate = new Date();
+    let allDailyData = []; // Store all data for navigation
+
+    let dailyChart, hourlyChart;
+    const COLORS = {
+        VVB1: '#3b82f6',
+        VVB2: '#22c55e',
+        VVB3: '#f59e0b',
+        total: '#a855f7'
+    };
+
+    async function loadData() {
+        await Promise.all([
+            loadSummary(),
+            loadActive24h(),
+            loadDaily(),
+            loadHourly(),
+            loadDbStatus()
+        ]);
+    }
+
+    async function loadSummary() {
+        try {
+            // Calculate date range based on navigation
+            const endDateStr = summaryEndDate.toISOString().split('T')[0];
+            const startDate = new Date(summaryEndDate);
+            startDate.setDate(startDate.getDate() - summaryPeriodDays + 1);
+            const startDateStr = startDate.toISOString().split('T')[0];
+
+            // Update range display
+            document.getElementById('summaryRange').textContent = `${startDateStr} - ${endDateStr}`;
+
+            // Update nav button state (disable "next" if at today)
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('summaryNext').disabled = endDateStr >= today;
+
+            // Fetch data for this specific range
+            const params = new URLSearchParams({
+                from: startDateStr,
+                to: endDateStr
+            });
+            if (currentDevice) params.append('device_id', currentDevice);
+
+            const resp = await fetch(`${API}/api/analytics/daily?${params}`);
+            const dailyRows = await resp.json();
+
+            // Calculate totals from daily data
+            let totalEnergy = 0;
+            let totalCost = 0;
+            const deviceSet = new Set();
+
+            dailyRows.forEach(row => {
+                totalEnergy += row.energy_kwh || 0;
+                totalCost += row.cost_sek || 0;
+                deviceSet.add(row.device_id);
+            });
+
+            const daysWithData = new Set(dailyRows.map(r => r.date)).size;
+            const avgDailyEnergy = daysWithData > 0 ? totalEnergy / daysWithData : 0;
+            const avgDailyCost = daysWithData > 0 ? totalCost / daysWithData : 0;
+
+            document.getElementById('totalEnergy').textContent = totalEnergy.toFixed(2);
+            document.getElementById('avgDailyEnergy').textContent = `${avgDailyEnergy.toFixed(2)} kWh/dag`;
+
+            document.getElementById('totalCost').textContent = totalCost.toFixed(2);
+            document.getElementById('avgDailyCost').textContent = `${avgDailyCost.toFixed(2)} kr/dag`;
+
+            // Load prices for this period to calculate average
+            const priceResp = await fetch(`${API}/api/analytics/prices?from=${startDateStr}&to=${endDateStr}`);
+            const prices = await priceResp.json();
+
+            if (prices.length > 0) {
+                const avgPrice = prices.reduce((s, p) => s + p.price_sek, 0) / prices.length;
+                const minPrice = Math.min(...prices.map(p => p.price_sek));
+                const maxPrice = Math.max(...prices.map(p => p.price_sek));
+                document.getElementById('avgPrice').textContent = avgPrice.toFixed(1);
+                document.getElementById('priceRange').textContent = `${minPrice.toFixed(0)} - ${maxPrice.toFixed(0)} ore`;
+            }
+
+            document.getElementById('dataPoints').textContent = dailyRows.length.toLocaleString();
+            document.getElementById('dataRange').textContent = `${daysWithData} dagar`;
+
+            // Populate device filter (only on first load)
+            if (devices.length === 0) {
+                const filter = document.getElementById('deviceFilter');
+                filter.innerHTML = '<option value="">Alla enheter</option>';
+                deviceSet.forEach(deviceId => {
+                    const row = dailyRows.find(r => r.device_id === deviceId);
+                    if (row) {
+                        filter.innerHTML += `<option value="${deviceId}">${row.device_name}</option>`;
+                        devices.push({device_id: deviceId, device_name: row.device_name});
+                    }
+                });
+            }
+        } catch (e) {
+            console.error('Failed to load summary:', e);
+        }
+    }
+
+    function summaryNav(direction) {
+        const days = direction === 'prev' ? -summaryPeriodDays : summaryPeriodDays;
+        summaryEndDate.setDate(summaryEndDate.getDate() + days);
+
+        // Don't go beyond today
+        const today = new Date();
+        if (summaryEndDate > today) {
+            summaryEndDate = today;
+        }
+
+        loadSummary();
+    }
+
+    function setSummaryPeriod(days) {
+        summaryPeriodDays = days;
+        summaryEndDate = new Date(); // Reset to today when changing period
+
+        // Update button states
+        document.querySelectorAll('.controls .btn').forEach(b => {
+            const text = b.textContent.trim();
+            if (text === '7 dagar' || text === '30 dagar' || text === '90 dagar') {
+                b.classList.remove('active');
+                if (text === days + ' dagar') {
+                    b.classList.add('active');
+                }
+            }
+        });
+
+        loadSummary();
+    }
+
+    async function loadActive24h() {
+        try {
+            const resp = await fetch(`${API}/api/analytics/active-hours-24h`);
+            const data = await resp.json();
+
+            const container = document.getElementById('active24h');
+
+            if (Object.keys(data).length === 0) {
+                container.innerHTML = '<div class="no-data">Ingen data. Kor backfill.py for att hamta historik.</div>';
+                return;
+            }
+
+            container.innerHTML = Object.values(data).map(d => `
+                <div class="device-24h">
+                    <div class="device-24h-name">${d.device_name}</div>
+                    <div class="device-24h-stats">
+                        <div class="device-24h-stat">
+                            <div class="device-24h-value" style="color: var(--green)">${d.active_hours}h</div>
+                            <div class="device-24h-label">Aktiva timmar</div>
+                        </div>
+                        <div class="device-24h-stat">
+                            <div class="device-24h-value" style="color: var(--accent)">${d.energy_kwh.toFixed(3)} kWh</div>
+                            <div class="device-24h-label">Forbrukning</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        } catch (e) {
+            console.error('Failed to load 24h stats:', e);
+            document.getElementById('active24h').innerHTML = '<div class="no-data">Kunde inte ladda data</div>';
+        }
+    }
+
+    async function loadDaily() {
+        try {
+            // Load 120 days of data for navigation (more causes slow API)
+            const params = new URLSearchParams({days: 120});
+            if (currentDevice) params.append('device_id', currentDevice);
+
+            const resp = await fetch(`${API}/api/analytics/daily?${params}`);
+            dailyData = await resp.json();
+            allDailyData = [...dailyData]; // Store for navigation
+
+            // Reset to latest data
+            dailyEndDate = new Date();
+
+            renderDailyChart();
+        } catch (e) {
+            console.error('Failed to load daily:', e);
+        }
+    }
+
+    async function loadHourly() {
+        try {
+            const now = new Date();
+            const from = new Date(now - currentPeriod * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const params = new URLSearchParams({from});
+            if (currentDevice) params.append('device_id', currentDevice);
+
+            const resp = await fetch(`${API}/api/analytics/hourly?${params}`);
+            hourlyData = await resp.json();
+
+            // Load prices too
+            const priceResp = await fetch(`${API}/api/analytics/prices?from=${from}`);
+            priceData = await priceResp.json();
+
+            // Calculate average price
+            if (priceData.length > 0) {
+                const avg = priceData.reduce((s, p) => s + p.price_sek, 0) / priceData.length;
+                const min = Math.min(...priceData.map(p => p.price_sek));
+                const max = Math.max(...priceData.map(p => p.price_sek));
+                document.getElementById('avgPrice').textContent = avg.toFixed(1);
+                document.getElementById('priceRange').textContent = `${min.toFixed(0)} - ${max.toFixed(0)} ore`;
+            }
+
+            renderHourlyChart('energy');
+        } catch (e) {
+            console.error('Failed to load hourly:', e);
+        }
+    }
+
+    async function loadDbStatus() {
+        try {
+            const resp = await fetch(`${API}/api/analytics/status`);
+            const data = await resp.json();
+
+            document.getElementById('dbStatus').innerHTML = `
+                <div class="db-status-item">
+                    <div class="db-status-label">Energi-matningar</div>
+                    <div class="db-status-value">${data.energy_readings.count.toLocaleString()}</div>
+                </div>
+                <div class="db-status-item">
+                    <div class="db-status-label">Enheter</div>
+                    <div class="db-status-value">${data.energy_readings.devices}</div>
+                </div>
+                <div class="db-status-item">
+                    <div class="db-status-label">Spotpriser</div>
+                    <div class="db-status-value">${data.spot_prices.count.toLocaleString()}</div>
+                </div>
+                <div class="db-status-item">
+                    <div class="db-status-label">Aldsta data</div>
+                    <div class="db-status-value">${data.energy_readings.oldest ? new Date(data.energy_readings.oldest).toLocaleDateString('sv-SE') : '-'}</div>
+                </div>
+                <div class="db-status-item">
+                    <div class="db-status-label">Senaste data</div>
+                    <div class="db-status-value">${data.energy_readings.newest ? new Date(data.energy_readings.newest).toLocaleDateString('sv-SE') : '-'}</div>
+                </div>
+            `;
+        } catch (e) {
+            console.error('Failed to load db status:', e);
+        }
+    }
+
+    function renderDailyChart() {
+        const ctx = document.getElementById('dailyChart').getContext('2d');
+        if (dailyChart) dailyChart.destroy();
+
+        if (allDailyData.length === 0) {
+            ctx.canvas.parentElement.innerHTML = '<div class="no-data">Ingen data. Kor backfill.py for att hamta historik.</div>';
+            return;
+        }
+
+        // Group by date, summing all devices if no filter
+        const byDate = {};
+        allDailyData.forEach(row => {
+            const date = row.date;
+            if (!byDate[date]) byDate[date] = {energy: 0, cost: 0};
+            byDate[date].energy += row.energy_kwh || 0;
+            byDate[date].cost += row.cost_sek || 0;
+        });
+
+        const allDates = Object.keys(byDate).sort();
+
+        // Filter dates based on window
+        const endDateStr = dailyEndDate.toISOString().split('T')[0];
+        const startDate = new Date(dailyEndDate);
+        startDate.setDate(startDate.getDate() - dailyWindowDays + 1);
+        const startDateStr = startDate.toISOString().split('T')[0];
+
+        const dates = allDates.filter(d => d >= startDateStr && d <= endDateStr);
+
+        // Update range display
+        if (dates.length > 0) {
+            document.getElementById('dailyRange').textContent = `${dates[0]} - ${dates[dates.length-1]}`;
+        }
+
+        // Update nav button states
+        const oldestDate = allDates[0];
+        const newestDate = allDates[allDates.length - 1];
+        document.getElementById('dailyPrev').disabled = startDateStr <= oldestDate;
+        document.getElementById('dailyNext').disabled = endDateStr >= newestDate;
+
+        const energyData = dates.map(d => byDate[d]?.energy || 0);
+        const costData = dates.map(d => byDate[d]?.cost || 0);
+
+        dailyChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: dates,
+                datasets: [
+                    {
+                        label: 'Energi (kWh)',
+                        data: energyData,
+                        backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                        borderColor: '#3b82f6',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'Kostnad (kr)',
+                        data: costData,
+                        type: 'line',
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 3,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { intersect: false, mode: 'index' },
+                scales: {
+                    x: {
+                        grid: { color: '#2a2d3a' },
+                        ticks: { color: '#8b8d97', maxRotation: 45 }
+                    },
+                    y: {
+                        type: 'linear',
+                        position: 'left',
+                        grid: { color: '#2a2d3a' },
+                        ticks: { color: '#3b82f6' },
+                        title: { display: true, text: 'kWh', color: '#3b82f6' }
+                    },
+                    y1: {
+                        type: 'linear',
+                        position: 'right',
+                        grid: { drawOnChartArea: false },
+                        ticks: { color: '#f59e0b' },
+                        title: { display: true, text: 'kr', color: '#f59e0b' }
+                    }
+                },
+                plugins: {
+                    legend: { labels: { color: '#e4e4e7' } },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                if (ctx.dataset.label.includes('Energi')) {
+                                    return `Energi: ${ctx.parsed.y.toFixed(3)} kWh`;
+                                }
+                                return `Kostnad: ${ctx.parsed.y.toFixed(2)} kr`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function dailyChartNav(direction) {
+        const days = direction === 'prev' ? -dailyWindowDays : dailyWindowDays;
+        dailyEndDate.setDate(dailyEndDate.getDate() + days);
+
+        // Don't go beyond today
+        const today = new Date();
+        if (dailyEndDate > today) {
+            dailyEndDate = today;
+        }
+
+        renderDailyChart();
+    }
+
+    function setDailyWindow(days) {
+        dailyWindowDays = days;
+        // Update button states
+        document.querySelectorAll('.controls .btn').forEach(b => {
+            if (b.textContent.includes('dagar') && !b.textContent.includes('Tidigare') && !b.textContent.includes('Senare')) {
+                b.classList.remove('active');
+                if (b.textContent.includes(days + ' dagar')) {
+                    b.classList.add('active');
+                }
+            }
+        });
+        renderDailyChart();
+    }
+
+    function renderHourlyChart(mode) {
+        const ctx = document.getElementById('hourlyChart').getContext('2d');
+        if (hourlyChart) hourlyChart.destroy();
+
+        if (hourlyData.length === 0 && priceData.length === 0) {
+            ctx.canvas.parentElement.innerHTML = '<div class="no-data">Ingen data</div>';
+            return;
+        }
+
+        // Group hourly data
+        const byHour = {};
+        hourlyData.forEach(row => {
+            if (!byHour[row.hour]) byHour[row.hour] = {energy: 0, cost: 0};
+            byHour[row.hour].energy += row.energy_kwh || 0;
+            byHour[row.hour].cost += row.cost_sek || 0;
+        });
+
+        // Get price data
+        const priceByHour = {};
+        priceData.forEach(p => {
+            const hour = p.timestamp.split(':')[0] + ':00:00';
+            priceByHour[hour] = p.price_sek;
+        });
+
+        const allHours = [...new Set([...Object.keys(byHour), ...Object.keys(priceByHour)])].sort();
+
+        // Limit to last N hours for better visualization
+        const maxHours = Math.min(168, allHours.length); // Max 1 week
+        const hours = allHours.slice(-maxHours);
+
+        let datasets;
+        if (mode === 'energy') {
+            datasets = [{
+                label: 'Energi (kWh)',
+                data: hours.map(h => byHour[h]?.energy || 0),
+                backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                borderColor: '#3b82f6',
+                borderWidth: 1,
+            }];
+        } else if (mode === 'cost') {
+            datasets = [{
+                label: 'Kostnad (kr)',
+                data: hours.map(h => byHour[h]?.cost || 0),
+                backgroundColor: 'rgba(245, 158, 11, 0.7)',
+                borderColor: '#f59e0b',
+                borderWidth: 1,
+            }];
+        } else {
+            datasets = [{
+                label: 'Elpris (ore/kWh)',
+                data: hours.map(h => priceByHour[h] || null),
+                backgroundColor: hours.map(h => {
+                    const p = priceByHour[h];
+                    if (!p) return '#333';
+                    if (p < 30) return 'rgba(34, 197, 94, 0.7)';
+                    if (p < 80) return 'rgba(245, 158, 11, 0.7)';
+                    return 'rgba(239, 68, 68, 0.7)';
+                }),
+                borderWidth: 0,
+            }];
+        }
+
+        hourlyChart = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: hours, datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        grid: { color: '#2a2d3a' },
+                        ticks: {
+                            color: '#8b8d97',
+                            maxRotation: 0,
+                            callback: function(val, index) {
+                                // Show only some labels
+                                const label = this.getLabelForValue(val);
+                                if (index % Math.ceil(hours.length / 12) === 0) {
+                                    return label.split(' ')[0].slice(5); // MM-DD
+                                }
+                                return '';
+                            }
+                        }
+                    },
+                    y: {
+                        grid: { color: '#2a2d3a' },
+                        ticks: { color: '#8b8d97' },
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: { labels: { color: '#e4e4e7' } },
+                    tooltip: {
+                        callbacks: {
+                            title: ctx => ctx[0].label,
+                            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(3) || 'N/A'}`
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function filterByDevice() {
+        currentDevice = document.getElementById('deviceFilter').value;
+        loadSummary();
+        loadDaily();
+        loadHourly();
+    }
+
+    function setHourlyView(mode) {
+        document.querySelectorAll('.controls .btn').forEach((b, i) => {
+            if (i < 3) b.classList.remove('active');
+        });
+        event.target.classList.add('active');
+        renderHourlyChart(mode);
+    }
+
+    // Initialize
+    loadData();
+    </script>
+</body>
+</html>

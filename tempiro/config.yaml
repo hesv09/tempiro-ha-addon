@@ -1,0 +1,33 @@
+name: "Tempiro Energy Monitor"
+description: "Monitor energy consumption from Tempiro smart breakers with spot price integration"
+version: "1.0.0"
+slug: "tempiro"
+url: "https://github.com/hesv09/tempiro-ha-addon"
+arch:
+  - amd64
+  - aarch64
+  - armv7
+  - armhf
+  - i386
+init: false
+startup: application
+boot: auto
+ports:
+  5001/tcp: 5001
+ports_description:
+  5001/tcp: "Web interface"
+map:
+  - config:rw
+options:
+  tempiro_username: ""
+  tempiro_password: ""
+  price_area: "SE3"
+schema:
+  tempiro_username: str
+  tempiro_password: password
+  price_area: list(SE1|SE2|SE3|SE4)
+panel_icon: "mdi:water-boiler"
+panel_title: "Tempiro Energy"
+ingress: true
+ingress_port: 5001
+homeassistant_api: false

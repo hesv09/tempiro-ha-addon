@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VVB Energi</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #1c1c1c;
+            --card: #252525;
+            --border: #3a3a3a;
+            --text: #e1e1e1;
+            --muted: #9a9a9a;
+            --accent: #42a5f5;
+            --green: #66bb6a;
+            --amber: #ffa726;
+            --purple: #ab47bc;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 16px;
+            min-height: 100vh;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .header h1 {
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+        .sync-status {
+            font-size: 0.75rem;
+            color: var(--muted);
+        }
+        .sync-status.ok { color: var(--green); }
+
+        /* Period selector */
+        .period-selector {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .period-nav {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .period-range {
+            font-size: 0.9rem;
+            font-weight: 500;
+            min-width: 180px;
+            text-align: center;
+        }
+        .period-buttons {
+            display: flex;
+            gap: 6px;
+        }
+        .btn {
+            padding: 6px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: transparent;
+            color: var(--muted);
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn:hover { border-color: var(--accent); color: var(--accent); }
+        .btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+        .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .btn.nav { padding: 6px 10px; font-size: 1rem; }
+
+        /* Stats grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .stat-card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .stat-sub {
+            font-size: 0.7rem;
+            color: var(--muted);
+            margin-top: 4px;
+        }
+
+        /* Chart */
+        .chart-card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .chart-card h2 {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--muted);
+            margin-bottom: 12px;
+        }
+        .chart-container {
+            position: relative;
+            height: 250px;
+        }
+
+        /* Status */
+        .status-card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 12px 16px;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        .status-item {
+            text-align: center;
+        }
+        .status-label {
+            font-size: 0.65rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .status-value {
+            font-size: 0.85rem;
+            margin-top: 2px;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: var(--muted);
+        }
+
+        @media (max-width: 500px) {
+            .stats-grid { grid-template-columns: 1fr; }
+            .period-selector { flex-direction: column; }
+            .period-nav { width: 100%; justify-content: center; }
+            .period-buttons { width: 100%; justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>⚡ VVB Energi</h1>
+        <div class="sync-status" id="syncStatus">--</div>
+    </div>
+
+    <!-- Period selector -->
+    <div class="period-selector">
+        <div class="period-nav">
+            <button class="btn nav" onclick="nav(-7)" title="En vecka bakåt">«</button>
+            <button class="btn nav" onclick="nav(-1)" title="En dag bakåt">‹</button>
+            <span class="period-range" id="periodRange">--</span>
+            <button class="btn nav" onclick="nav(1)" title="En dag framåt">›</button>
+            <button class="btn nav" onclick="nav(7)" title="En vecka framåt" id="navNext7">»</button>
+        </div>
+        <div class="period-buttons">
+            <button class="btn" onclick="setPeriod(1)">1d</button>
+            <button class="btn active" onclick="setPeriod(7)">7d</button>
+            <button class="btn" onclick="setPeriod(30)">30d</button>
+            <button class="btn" onclick="setPeriod(90)">90d</button>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value" style="color: var(--accent)" id="totalEnergy">--</div>
+            <div class="stat-label">kWh</div>
+            <div class="stat-sub" id="avgEnergy">--/dag</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" style="color: var(--amber)" id="totalCost">--</div>
+            <div class="stat-label">Kronor</div>
+            <div class="stat-sub" id="avgCost">--/dag</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" style="color: var(--green)" id="avgPrice">--</div>
+            <div class="stat-label">öre/kWh snitt</div>
+            <div class="stat-sub" id="priceRange">--</div>
+        </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="chart-card">
+        <h2>Daglig förbrukning & kostnad</h2>
+        <div class="chart-container">
+            <canvas id="dailyChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Status -->
+    <div class="status-card">
+        <div class="status-item">
+            <div class="status-label">Mätningar</div>
+            <div class="status-value" id="dbReadings">--</div>
+        </div>
+        <div class="status-item">
+            <div class="status-label">Äldsta</div>
+            <div class="status-value" id="dbOldest">--</div>
+        </div>
+        <div class="status-item">
+            <div class="status-label">Senaste</div>
+            <div class="status-value" id="dbNewest">--</div>
+        </div>
+        <div class="status-item">
+            <div class="status-label">Sync</div>
+            <div class="status-value" id="lastSync">--</div>
+        </div>
+    </div>
+
+    <script>
+    const API = '';
+    let periodDays = 7;
+    let endDate = new Date();
+    let dailyChart = null;
+    let allData = [];
+
+    async function loadData() {
+        try {
+            // Load data
+            const [dailyResp, statusResp, syncResp] = await Promise.all([
+                fetch(`${API}/api/analytics/daily?days=120`),
+                fetch(`${API}/api/analytics/status`),
+                fetch(`${API}/api/sync/status`)
+            ]);
+
+            allData = await dailyResp.json();
+            const status = await statusResp.json();
+            const sync = await syncResp.json();
+
+            // Update status
+            document.getElementById('dbReadings').textContent = status.energy_readings.count.toLocaleString();
+            document.getElementById('dbOldest').textContent = status.energy_readings.oldest ?
+                new Date(status.energy_readings.oldest).toLocaleDateString('sv-SE') : '-';
+            document.getElementById('dbNewest').textContent = status.energy_readings.newest ?
+                new Date(status.energy_readings.newest).toLocaleDateString('sv-SE') : '-';
+
+            if (sync.last_sync?.energy) {
+                const syncTime = new Date(sync.last_sync.energy);
+                document.getElementById('lastSync').textContent = syncTime.toLocaleTimeString('sv-SE', {hour: '2-digit', minute: '2-digit'});
+                document.getElementById('syncStatus').textContent = '● Synkad ' + syncTime.toLocaleTimeString('sv-SE', {hour: '2-digit', minute: '2-digit'});
+                document.getElementById('syncStatus').classList.add('ok');
+            }
+
+            updateView();
+        } catch (e) {
+            console.error('Failed to load data:', e);
+        }
+    }
+
+    function updateView() {
+        // Calculate date range
+        const endStr = endDate.toISOString().split('T')[0];
+        const startDate = new Date(endDate);
+        startDate.setDate(startDate.getDate() - periodDays + 1);
+        const startStr = startDate.toISOString().split('T')[0];
+
+        // Update range display
+        if (periodDays === 1) {
+            document.getElementById('periodRange').textContent = endStr;
+        } else {
+            document.getElementById('periodRange').textContent = `${startStr} → ${endStr}`;
+        }
+
+        // Filter data for period
+        const filtered = allData.filter(d => d.date >= startStr && d.date <= endStr);
+
+        // Group by date (sum all devices)
+        const byDate = {};
+        filtered.forEach(row => {
+            if (!byDate[row.date]) byDate[row.date] = { energy: 0, cost: 0 };
+            byDate[row.date].energy += row.energy_kwh || 0;
+            byDate[row.date].cost += row.cost_sek || 0;
+        });
+
+        const dates = Object.keys(byDate).sort();
+        const daysWithData = dates.length;
+
+        // Calculate totals
+        let totalEnergy = 0, totalCost = 0;
+        dates.forEach(d => {
+            totalEnergy += byDate[d].energy;
+            totalCost += byDate[d].cost;
+        });
+
+        // Update stats
+        document.getElementById('totalEnergy').textContent = totalEnergy.toFixed(1);
+        document.getElementById('totalCost').textContent = totalCost.toFixed(0);
+        document.getElementById('avgEnergy').textContent = daysWithData > 0 ?
+            `${(totalEnergy / daysWithData).toFixed(1)} kWh/dag` : '--';
+        document.getElementById('avgCost').textContent = daysWithData > 0 ?
+            `${(totalCost / daysWithData).toFixed(0)} kr/dag` : '--';
+
+        // Average price
+        if (totalEnergy > 0) {
+            const avgPrice = (totalCost / totalEnergy) * 100;
+            document.getElementById('avgPrice').textContent = avgPrice.toFixed(0);
+        }
+
+        // Disable forward nav if at today
+        const today = new Date().toISOString().split('T')[0];
+        document.querySelectorAll('.btn.nav').forEach(btn => {
+            if (btn.textContent === '›' || btn.textContent === '»') {
+                btn.disabled = endStr >= today;
+            }
+        });
+
+        // Update button states
+        document.querySelectorAll('.period-buttons .btn').forEach(btn => {
+            const days = parseInt(btn.textContent);
+            btn.classList.toggle('active', days === periodDays);
+        });
+
+        renderChart(dates, byDate);
+    }
+
+    function renderChart(dates, byDate) {
+        const ctx = document.getElementById('dailyChart').getContext('2d');
+        if (dailyChart) dailyChart.destroy();
+
+        if (dates.length === 0) {
+            ctx.canvas.parentElement.innerHTML = '<div class="no-data">Ingen data för vald period</div>';
+            return;
+        }
+
+        const energyData = dates.map(d => byDate[d].energy);
+        const costData = dates.map(d => byDate[d].cost);
+
+        dailyChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: dates.map(d => d.slice(5)), // MM-DD
+                datasets: [
+                    {
+                        label: 'kWh',
+                        data: energyData,
+                        backgroundColor: 'rgba(66, 165, 245, 0.7)',
+                        borderColor: '#42a5f5',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'kr',
+                        data: costData,
+                        type: 'line',
+                        borderColor: '#ffa726',
+                        backgroundColor: 'rgba(255, 167, 38, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 2,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { intersect: false, mode: 'index' },
+                scales: {
+                    x: {
+                        grid: { color: '#3a3a3a' },
+                        ticks: { color: '#9a9a9a', maxRotation: 0 }
+                    },
+                    y: {
+                        type: 'linear',
+                        position: 'left',
+                        grid: { color: '#3a3a3a' },
+                        ticks: { color: '#42a5f5' },
+                        title: { display: true, text: 'kWh', color: '#42a5f5' }
+                    },
+                    y1: {
+                        type: 'linear',
+                        position: 'right',
+                        grid: { drawOnChartArea: false },
+                        ticks: { color: '#ffa726' },
+                        title: { display: true, text: 'kr', color: '#ffa726' }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                if (ctx.dataset.label === 'kWh') {
+                                    return `Energi: ${ctx.parsed.y.toFixed(1)} kWh`;
+                                }
+                                return `Kostnad: ${ctx.parsed.y.toFixed(0)} kr`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function setPeriod(days) {
+        periodDays = days;
+        endDate = new Date(); // Reset to today
+        updateView();
+    }
+
+    function nav(days) {
+        endDate.setDate(endDate.getDate() + days);
+        const today = new Date();
+        if (endDate > today) endDate = today;
+        updateView();
+    }
+
+    // Load on start
+    loadData();
+
+    // Auto-refresh every 5 minutes
+    setInterval(loadData, 5 * 60 * 1000);
+    </script>
+</body>
+</html>
