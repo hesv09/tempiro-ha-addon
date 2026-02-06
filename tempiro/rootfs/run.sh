@@ -1,11 +1,16 @@
-#!/usr/bin/with-contenv bashio
+#!/bin/sh
 
-# Read configuration from Home Assistant
+# Read configuration from Home Assistant options
 CONFIG_PATH=/data/options.json
 
-TEMPIRO_USERNAME=$(bashio::config 'tempiro_username')
-TEMPIRO_PASSWORD=$(bashio::config 'tempiro_password')
-PRICE_AREA=$(bashio::config 'price_area')
+if [ -f "$CONFIG_PATH" ]; then
+    TEMPIRO_USERNAME=$(jq -r '.tempiro_username' $CONFIG_PATH)
+    TEMPIRO_PASSWORD=$(jq -r '.tempiro_password' $CONFIG_PATH)
+    PRICE_AREA=$(jq -r '.price_area // "SE3"' $CONFIG_PATH)
+else
+    echo "ERROR: No configuration file found at $CONFIG_PATH"
+    exit 1
+fi
 
 # Create config file for the app
 cat > /app/config.json << EOF
@@ -26,8 +31,8 @@ EOF
 # Set data directory to persistent storage
 export DATA_DIR=/data
 
-bashio::log.info "Starting Tempiro Energy Monitor..."
-bashio::log.info "Price area: ${PRICE_AREA}"
+echo "Starting Tempiro Energy Monitor..."
+echo "Price area: ${PRICE_AREA}"
 
 cd /app
 exec python3 app.py

@@ -2,18 +2,24 @@ ARG BUILD_FROM
 FROM $BUILD_FROM
 
 # Install Python and dependencies
-RUN apk add --no-cache python3 py3-pip py3-requests py3-flask
+RUN apk add --no-cache \
+    python3 \
+    py3-pip \
+    py3-requests \
+    jq
 
 # Create app directory
 WORKDIR /app
 
 # Copy application files
-COPY rootfs /
 COPY app.py database.py backfill.py requirements.txt /app/
 COPY static /app/static/
+COPY rootfs/run.sh /run.sh
 
 # Install Python dependencies
-RUN pip3 install --no-cache-dir flask-cors
+RUN pip3 install --no-cache-dir --break-system-packages \
+    flask \
+    flask-cors
 
 # Set permissions
 RUN chmod +x /run.sh
