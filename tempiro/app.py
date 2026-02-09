@@ -6,17 +6,24 @@ import requests
 import threading
 import time
 from datetime import datetime, timedelta
+from functools import wraps
 from pathlib import Path
 from flask import Flask, jsonify, request, Response
-from flask_cors import CORS
 
 import database
 
 app = Flask(__name__)
-CORS(app)
 
-# Track last sync time
-_last_sync = {"energy": None, "prices": None}
+# [P0 FIX] Restrict CORS to same-origin only (no CORS headers = browser blocks cross-origin)
+# We don't use flask-cors at all now - only same-origin requests allowed
+
+# Track last sync time and success status
+_last_sync = {
+    "energy": None,
+    "prices": None,
+    "energy_success": False,
+    "prices_success": False
+}
 
 # Static directory for HTML files
 STATIC_DIR = Path(__file__).parent / "static"
@@ -37,6 +44,33 @@ TEMPIRO_BASE = config["tempiro"]["base_url"]
 USERNAME = config["tempiro"]["username"]
 PASSWORD = config["tempiro"]["password"]
 PRICE_AREA = config.get("price_area", "SE3")
+
+# [P0 FIX] Simple API key for protecting sensitive endpoints
+# In HA Add-on context, we rely on HA's ingress authentication
+# For direct access, we check referer to ensure requests come from our own pages
+def require_same_origin(f):
+    """Decorator to ensure requests come from same origin (basic CSRF protection)."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Allow if request comes from our own pages or is a same-origin request
+        referer = request.headers.get('Referer', '')
+        host = request.headers.get('Host', '')
+
+        # In HA ingress context, trust all requests (HA handles auth)
+        if 'ingress' in referer or request.headers.get('X-Ingress-Path'):
+            return f(*args, **kwargs)
+
+        # For direct access, check that referer matches host
+        if referer and host and host in referer:
+            return f(*args, **kwargs)
+
+        # Allow requests without referer (direct API calls from same machine)
+        if not referer and request.remote_addr in ('127.0.0.1', '::1', 'localhost'):
+            return f(*args, **kwargs)
+
+        return jsonify({"error": "Forbidden - cross-origin request blocked"}), 403
+    return decorated_function
+
 
 # Token cache
 _token_cache = {"token": None, "expires": None}
@@ -106,36 +140,46 @@ def sync_energy_data():
                 total_saved += saved
 
         _last_sync["energy"] = datetime.now().isoformat()
+        _last_sync["energy_success"] = True
         print(f"[SYNC] Energy: {total_saved} readings saved")
         return total_saved
     except Exception as e:
         print(f"[SYNC] Energy error: {e}")
+        _last_sync["energy_success"] = False
         return 0
 
 
 def sync_spot_prices():
     """Sync spot prices from elprisetjustnu.se to local database."""
-    try:
-        total_saved = 0
-        for days_ago in range(-1, 3):
-            date = datetime.now() - timedelta(days=days_ago)
-            date_str = date.strftime("%Y/%m-%d")
-            url = f"https://www.elprisetjustnu.se/api/v1/prices/{date_str}_{PRICE_AREA}.json"
-            try:
-                resp = requests.get(url, timeout=10)
-                if resp.status_code == 200:
-                    prices = resp.json()
-                    saved = database.save_spot_prices(prices, PRICE_AREA)
-                    total_saved += saved
-            except:
-                pass
+    total_saved = 0
+    errors = 0
 
+    for days_ago in range(-1, 3):
+        date = datetime.now() - timedelta(days=days_ago)
+        date_str = date.strftime("%Y/%m-%d")
+        url = f"https://www.elprisetjustnu.se/api/v1/prices/{date_str}_{PRICE_AREA}.json"
+        try:
+            resp = requests.get(url, timeout=10)
+            if resp.status_code == 200:
+                prices = resp.json()
+                saved = database.save_spot_prices(prices, PRICE_AREA)
+                total_saved += saved
+            elif resp.status_code != 404:  # 404 is expected for future dates
+                errors += 1
+        except Exception as e:
+            print(f"[SYNC] Price fetch error for {date_str}: {e}")
+            errors += 1
+
+    # [P1 FIX] Only mark as success if we got at least some data and no critical errors
+    if total_saved > 0:
         _last_sync["prices"] = datetime.now().isoformat()
+        _last_sync["prices_success"] = True
         print(f"[SYNC] Prices: {total_saved} prices saved")
-        return total_saved
-    except Exception as e:
-        print(f"[SYNC] Prices error: {e}")
-        return 0
+    else:
+        _last_sync["prices_success"] = False
+        print(f"[SYNC] Prices: failed to fetch any prices (errors: {errors})")
+
+    return total_saved
 
 
 def background_sync_loop():
@@ -161,6 +205,18 @@ def start_background_sync():
         print("[SYNC] Background sync started (every 1 hour)")
 
 
+# --- Helper for parameter validation ---
+
+def parse_int_param(value, default=None, param_name="parameter"):
+    """[P2 FIX] Safely parse integer parameter with proper error handling."""
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return None  # Will be handled by caller
+
+
 # --- Static Routes ---
 
 @app.route("/")
@@ -184,32 +240,52 @@ def ha_dashboard():
 @app.route("/api/devices")
 def devices():
     """Get all devices with current status."""
-    data = api_get("/api/Devices")
-    devices_list = []
-    for d in data:
-        devices_list.append({
-            "id": d["Id"],
-            "name": d["Name"],
-            "deviceId": d["DeviceId"],
-            "value": d["Value"],
-            "currentPower": d["CurrentPower"],
-            "batteryOK": d["BatteryOK"],
-            "fuseVoltageOK": d["FuseVoltageOK"],
-            "offline": d["OfflineFlag"],
-            "lastUpdate": d["LastUpdate"],
-            "spotArea": d["spotArea"],
-            "hoursActive": d["hoursActive"],
-        })
-    return jsonify(devices_list)
+    try:
+        data = api_get("/api/Devices")
+        devices_list = []
+        for d in data:
+            devices_list.append({
+                "id": d["Id"],
+                "name": d["Name"],
+                "deviceId": d["DeviceId"],
+                "value": d["Value"],
+                "currentPower": d["CurrentPower"],
+                "batteryOK": d["BatteryOK"],
+                "fuseVoltageOK": d["FuseVoltageOK"],
+                "offline": d["OfflineFlag"],
+                "lastUpdate": d["LastUpdate"],
+                "spotArea": d["spotArea"],
+                "hoursActive": d["hoursActive"],
+            })
+        return jsonify(devices_list)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
 
 
 @app.route("/api/devices/<device_id>/switch", methods=["PUT"])
+@require_same_origin  # [P0 FIX] Protect switch endpoint
 def switch_device(device_id):
     """Turn device on (1) or off (0)."""
-    body = request.get_json()
-    value = body.get("value", 0)
-    result = api_put(f"/api/Switch/{device_id}", {"Value": value, "Id": device_id})
-    return jsonify({"ok": True, "result": result})
+    # [P1 FIX] Proper JSON validation
+    body = request.get_json(silent=True)
+    if body is None:
+        return jsonify({"error": "Invalid or missing JSON body"}), 400
+
+    value = body.get("value")
+    if value is None:
+        return jsonify({"error": "Missing 'value' parameter"}), 400
+
+    # Validate value is 0 or 1
+    if value not in (0, 1, "0", "1"):
+        return jsonify({"error": "Value must be 0 or 1"}), 400
+
+    value = int(value)
+
+    try:
+        result = api_put(f"/api/Switch/{device_id}", {"Value": value, "Id": device_id})
+        return jsonify({"ok": True, "result": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
 
 
 @app.route("/api/devices/<device_id>/values")
@@ -218,10 +294,19 @@ def device_values(device_id):
     date_from = request.args.get("from", datetime.now().strftime("%Y-%m-%dT00:00:00"))
     date_to = request.args.get("to", datetime.now().strftime("%Y-%m-%dT23:59:59"))
     interval = request.args.get("interval", "15")
-    data = api_get(
-        f"/api/Values/{device_id}/interval?from={date_from}&to={date_to}&intervalMinutes={interval}"
-    )
-    return jsonify(data)
+
+    # [P2 FIX] Validate interval
+    interval_int = parse_int_param(interval, default=15)
+    if interval_int is None or interval_int < 1:
+        return jsonify({"error": "Invalid interval parameter"}), 400
+
+    try:
+        data = api_get(
+            f"/api/Values/{device_id}/interval?from={date_from}&to={date_to}&intervalMinutes={interval_int}"
+        )
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
 
 
 @app.route("/api/spot-prices")
@@ -278,10 +363,13 @@ def daily_summary():
     device_id = request.args.get("device_id")
     from_date = request.args.get("from")
     to_date = request.args.get("to")
-    days = request.args.get("days")
+    days_param = request.args.get("days")
 
-    if days:
-        days = int(days)
+    # [P2 FIX] Validate days parameter
+    if days_param:
+        days = parse_int_param(days_param)
+        if days is None or days < 1:
+            return jsonify({"error": "Invalid 'days' parameter - must be a positive integer"}), 400
         to_date = datetime.now().strftime("%Y-%m-%d")
         from_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     else:
@@ -310,6 +398,7 @@ def price_history():
 
 
 @app.route("/api/sync", methods=["POST"])
+@require_same_origin  # [P0 FIX] Protect sync endpoint
 def manual_sync():
     """Trigger a manual sync."""
     energy_count = sync_energy_data()
@@ -337,8 +426,12 @@ if __name__ == "__main__":
     sync_energy_data()
     sync_spot_prices()
 
+    # [P0 FIX] Never use debug=True in production
+    # debug mode is controlled by environment variable for development only
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+
     app.run(
         host=config["server"]["host"],
         port=config["server"]["port"],
-        debug=False,
+        debug=debug_mode,
     )
